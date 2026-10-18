@@ -108,8 +108,54 @@ function newRecord(type){
   save=()=>{if(!val('aProperty')||!val('aName'))return alert('Completa la propiedad y el nombre del apartamento.');db.apartments.push({id:id(),propertyId:val('aProperty'),name:val('aName'),responsible:val('aResponsible'),people:Math.max(0,Number(val('aPeople'))||0)});closeModal();saveDB()};
  }else if(type==='bill'){
   if(!db.properties.length)return alert('Primero crea una propiedad.');
-  body=bodyStart+field('Propiedad','bProperty','select',propertyOptions())+`<div class="field"><label>Servicio *</label><select id="bService"><option>Enel</option><option>Acueducto</option><option>Vanti</option><option>Otro</option></select></div>`+field('Periodo de facturación','bPeriod')+field('Valor total','bAmount','number')+field('Fecha de emisión','bIssue','date', '',false)+field('Fecha de vencimiento','bDue','date','',false)+`<div class="field full"><label for="bPhoto">Foto de la factura (opcional)</label><input id="bPhoto" type="file" accept="image/*" capture="environment"><small class="muted">En iPhone puedes elegir “Tomar foto” para fotografiar la factura o seleccionar una imagen existente.</small><div id="bPhotoPreview" class="muted"></div></div><div class="field full"><label>Notas</label><textarea id="bNotes" placeholder="Datos de referencia, número de factura, etc."></textarea></div></div>`;
-  save=async()=>{if(!val('bProperty')||!val('bAmount'))return alert('Selecciona propiedad e importe.');const file=document.getElementById('bPhoto')?.files?.[0];let photoData='';if(file){if(!file.type.startsWith('image/'))return alert('Selecciona una imagen.');try{photoData=await compressImage(file)}catch(e){return alert('No se pudo procesar la foto. Intenta con otra imagen.')}}db.bills.push({id:id(),propertyId:val('bProperty'),service:val('bService'),period:val('bPeriod'),amount:Number(val('bAmount')),issueDate:val('bIssue'),dueDate:val('bDue'),notes:val('bNotes'),photoData,photoName:file?.name||'',createdAt:new Date().toISOString()});closeModal();saveDB()};
+  body=bodyStart+field('Propiedad','bProperty','select',propertyOptions())+`<div class="field"><label>Servicio *</label><select id="bService"><option>Enel</option><option>Acueducto</option><option>Vanti</option><option>Otro</option></select></div>`+field('Periodo de facturación','bPeriod')+field('Valor total','bAmount','number')+field('Fecha de emisión','bIssue','date', '',false)+field('Fecha de vencimiento','bDue','date','',false)+`<div class="field full"><label for="bPhoto">Foto de la factura (opcional)</label><input id="bPhoto" type="file" accept="image/*,.pdf,application/pdf"><small class="muted">Selecciona una fotografía o un archivo PDF de la factura.</small><div id="bPhotoPreview" class="muted"></div></div><div class="field full"><label>Notas</label><textarea id="bNotes" placeholder="Datos de referencia, número de factura, etc."></textarea></div></div>`;
+  save=async()=>{
+  if(!val('bProperty')||!val('bAmount'))
+    return alert('Selecciona propiedad e importe.');
+
+  const file=document.getElementById('bPhoto')?.files?.[0];
+  let photoData='';
+
+  if(file){
+    if(!file.type.startsWith('image/')&&file.type!=='application/pdf')
+      return alert('Selecciona una imagen o un PDF.');
+
+    try{
+      if(file.type==='application/pdf'){
+        if(file.size>2*1024*1024)
+          return alert('El PDF no puede superar 2 MB.');
+
+        photoData=await new Promise((resolve,reject)=>{
+          const reader=new FileReader();
+          reader.onload=()=>resolve(String(reader.result));
+          reader.onerror=reject;
+          reader.readAsDataURL(file);
+        });
+      }else{
+        photoData=await compressImage(file);
+      }
+    }catch(e){
+      return alert('No se pudo procesar el archivo. Intenta con otro.');
+    }
+  }
+
+  db.bills.push({
+    id:id(),
+    propertyId:val('bProperty'),
+    service:val('bService'),
+    period:val('bPeriod'),
+    amount:Number(val('bAmount')),
+    issueDate:val('bIssue'),
+    dueDate:val('bDue'),
+    notes:val('bNotes'),
+    photoData,
+    photoName:file?.name||'',
+    createdAt:new Date().toISOString()
+  });
+
+  closeModal();
+  saveDB();
+};
  }else if(type==='reading'){
   if(!db.apartments.length)return alert('Primero crea un apartamento.');
   body=bodyStart+field('Apartamento','rApartment','select',apartmentOptions())+`<div class="field"><label>Servicio *</label><select id="rService"><option>Enel</option><option>Acueducto</option><option>Vanti</option></select></div>`+field('Periodo','rPeriod')+field('Lectura anterior','rPrevious','number')+field('Lectura actual','rCurrent','number')+'</div>';
@@ -126,13 +172,21 @@ function newRecord(type){
  const titles2={property:'Nueva propiedad',apartment:'Nuevo apartamento',bill:'Registrar factura',reading:'Registrar lectura',payment:'Registrar pago',receipt:'Crear recibo'};
  openModal(titles2[type]||'Nuevo registro',body,save);
  if(type==='bill'){
-   const photoInput=document.getElementById('bPhoto');
+   const photoInput=document.getElementById('
    photoInput?.addEventListener('change',()=>{
-     const file=photoInput.files?.[0], preview=document.getElementById('bPhotoPreview');
-     if(!preview)return;
-     if(!file){preview.textContent='';return;}
-     preview.textContent='Foto seleccionada: '+file.name;
-   });
+  const file=photoInput.files?.[0];
+  const preview=document.getElementById('bPhotoPreview');
+  if(!preview)return;
+  if(!file){preview.textContent='';return;}
+  if(file.type==='application/pdf'){
+    preview.textContent='PDF seleccionado: '+file.name;
+  }else if(file.type.startsWith('image/')){
+    preview.textContent='Foto seleccionada: '+file.name;
+  }else{
+    preview.textContent='Formato no compatible.';
+  }
+});
+                                            
  }
 }
 function compressImage(file){
